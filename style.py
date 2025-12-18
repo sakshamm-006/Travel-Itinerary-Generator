@@ -159,6 +159,43 @@ CSS_STYLE = """
         color: #166534;
     }
     
+    /* Traffic badges */
+    .traffic-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .light-traffic {
+        background-color: #10B981;
+        color: white;
+    }
+    
+    .moderate-traffic {
+        background-color: #F59E0B;
+        color: white;
+    }
+    
+    .heavy-traffic {
+        background-color: #F97316;
+        color: white;
+    }
+    
+    .severe-traffic {
+        background-color: #DC2626;
+        color: white;
+    }
+    
+    .no-traffic-data {
+        background-color: #6B7280;
+        color: white;
+    }
+    
     /* Day color badges */
     .day-color-badge {
         display: inline-block;
@@ -286,6 +323,36 @@ CSS_STYLE = """
         font-size: 0.8rem;
         line-height: 1.5;
     }
+    
+    /* Badge container for multiple badges */
+    .badge-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Delay badge */
+    .delay-badge {
+        background-color: #EF4444;
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    /* Distance badge */
+    .distance-badge {
+        background-color: #3B82F6;
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        display: inline-flex;
+        align-items: center;
+    }
 </style>
 """
 
@@ -328,11 +395,11 @@ def get_stats_card(value, label):
     </div>
     """
 
-# HTML for activity cards
-def get_activity_card(place, time, emoji, badge_html, card_class):
+# HTML for activity cards - UPDATED to handle badge containers properly
+def get_activity_card(place, time, emoji, badge_container_html, card_class):
     return f"""
     <div class="activity-card {card_class}">
-        {badge_html}
+        {badge_container_html}
         <div style="display: flex; align-items: flex-start; margin-bottom: 8px;">
             <span style="font-size: 1.5rem; margin-right: 12px; margin-top: 2px;">{emoji}</span>
             <div style="flex: 1;">
@@ -363,6 +430,34 @@ def get_day_color_indicator(day_name, color):
         {day_name}
     </div>
     """
+
+# Get traffic badge HTML
+def get_traffic_badge(traffic_level, traffic_emoji):
+    traffic_class = ""
+    if traffic_level == "Light Traffic":
+        traffic_class = "light-traffic"
+    elif traffic_level == "Moderate Traffic":
+        traffic_class = "moderate-traffic"
+    elif traffic_level == "Heavy Traffic":
+        traffic_class = "heavy-traffic"
+    elif traffic_level == "Severe Traffic":
+        traffic_class = "severe-traffic"
+    else:
+        traffic_class = "no-traffic-data"
+    
+    return f'<span class="traffic-badge {traffic_class}">{traffic_emoji} {traffic_level}</span>'
+
+# Get delay badge HTML
+def get_delay_badge(delay_percentage):
+    if delay_percentage > 0:
+        return f'<span class="delay-badge">⚠️ +{delay_percentage:.0f}% delay</span>'
+    return ""
+
+# Get distance badge HTML
+def get_distance_badge(distance_km):
+    if distance_km:
+        return f'<span class="distance-badge">📏 {distance_km:.1f} km</span>'
+    return ""
 
 # Helper to get appropriate badge and styling for activity
 def get_activity_styling(activity):
