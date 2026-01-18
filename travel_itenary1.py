@@ -10,14 +10,14 @@ from style import CSS_STYLE, MAIN_TITLE_HTML, SIDEBAR_HEADER_HTML, get_stats_car
 
 st.set_page_config(page_title="Smart Travel Itinerary", layout="wide")
 
-# ================= SESSION INIT =================
+# -------Session init-------------
 if "itinerary" not in st.session_state:
     st.session_state.itinerary = None
 
-# ================= YOUR API KEY =================
+#-------Your API Key--------------
 DEFAULT_API_KEY = "AIzaSyAQlGmMpr-oq_ZL0U0khgECyZZPrK-WQww"
 
-# ================= LOAD DATA =================
+# ----------Helps in loading the data----------- 
 @st.cache_data
 def load_data():
     df = pd.read_excel("DataSet_Travel_Itenary.xlsx")
@@ -42,7 +42,7 @@ def load_data():
 
 df = load_data()
 
-# ================= BUDGET =================
+#----------Budget for the itinerary-------------
 def normalize_budget(x):
     x = str(x).lower()
     if "low" in x:
@@ -60,7 +60,7 @@ def filter_by_budget(df_city, user_budget):
         return df_city[df_city.Budget_Normalized.isin(["low", "medium"])]
     return df_city
 
-# ================= TRAVEL TIME HELPERS WITH LIVE TRAFFIC API =================
+# -------------Travel time helper with live traffic API-------------- 
 class TrafficAwareTravelCalculator:
     def __init__(self, api_key=None, mode="driving"):
         self.api_key = api_key
