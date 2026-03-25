@@ -10,14 +10,56 @@ from style import CSS_STYLE, MAIN_TITLE_HTML, SIDEBAR_HEADER_HTML, get_stats_car
 
 st.set_page_config(page_title="Smart Travel Itinerary", layout="wide")
 
-# -------Session init-------------
+# ================= OLLAMA CHATBOT (LOCAL & FREE) =================
+import ollama
+
+# No API key needed! Ollama runs locally on your computer
+
+def query_ollama(messages, model_name="tinyllama"):
+    """
+    Query locally running Ollama model with full conversation history
+    Args:
+        messages: List of message dictionaries with 'role' and 'content'
+        model_name: Which model to use
+    """
+    try:
+        # Get response from Ollama with full conversation
+        response = ollama.chat(
+            model=model_name,
+            messages=messages,
+            options={
+                "temperature": 0.7,
+                "num_predict": 250,
+                "num_ctx": 2048  # Larger context window for better memory
+            }
+        )
+        
+        return response['message']['content']
+        
+    except Exception as e:
+        error_str = str(e)
+        if "connection" in error_str.lower() or "refused" in error_str.lower():
+            return "⚠️ **Ollama is not running!** Please:\n1. Open Command Prompt\n2. Run: `ollama serve`\n3. Keep that window open"
+        elif "model" in error_str.lower() and "not found" in error_str.lower():
+            return f"⚠️ Model not found. Please run: `ollama pull {model_name}`"
+        else:
+            return f"⚠️ Ollama error: {error_str}"
+
+# ================= SESSION INIT =================
 if "itinerary" not in st.session_state:
     st.session_state.itinerary = None
 
-#-------Your API Key--------------
+# ================= CHATBOT SESSION =================
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# ================= YOUR API KEY =================
 DEFAULT_API_KEY = "AIzaSyAQlGmMpr-oq_ZL0U0khgECyZZPrK-WQww"
 
-# ----------Helps in loading the data----------- 
+# ================= WEATHER API =================
+WEATHER_API_KEY = "89e858f463d9825b10ea0f27b233a039"
+
+# ================= LOAD DATA =================
 @st.cache_data
 def load_data():
     df = pd.read_excel("DataSet_Travel_Itenary.xlsx")
@@ -42,7 +84,7 @@ def load_data():
 
 df = load_data()
 
-#----------Budget for the itinerary-------------
+# ================= BUDGET =================
 def normalize_budget(x):
     x = str(x).lower()
     if "low" in x:
@@ -60,7 +102,32 @@ def filter_by_budget(df_city, user_budget):
         return df_city[df_city.Budget_Normalized.isin(["low", "medium"])]
     return df_city
 
-# -------------Travel time helper with live traffic API-------------- 
+# ================= WEATHER FUNCTION =================
+def get_weather(city):
+    url = "https://api.openweathermap.org/data/2.5/weather"
+
+    params = {
+        "q": city,
+        "appid": WEATHER_API_KEY,
+        "units": "metric"
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+
+        if data["cod"] == 200:
+            temp = data["main"]["temp"]
+            condition = data["weather"][0]["description"]
+            humidity = data["main"]["humidity"]
+
+            return temp, condition, humidity
+        else:
+            return None
+    except:
+        return None
+
+# ================= TRAVEL TIME HELPERS WITH LIVE TRAFFIC API =================
 class TrafficAwareTravelCalculator:
     def __init__(self, api_key=None, mode="driving"):
         self.api_key = api_key
@@ -374,6 +441,24 @@ def get_next_city(current_city, visited, exhausted_cities):
             return c.sort_values("dist").iloc[0].City
 
     return None
+
+# ================= EXPORT HELPER =================
+def itinerary_to_dataframe(itinerary):
+    rows = []
+
+    for day, activities in itinerary.items():
+        for act in activities:
+            rows.append({
+                "Day": day,
+                "Place": act.get("Place"),
+                "Time": act.get("Time"),
+                "Category": act.get("Category"),
+                "Travel_Time": act.get("Travel_Time", ""),
+                "Traffic_Level": act.get("Traffic_Level", ""),
+                "Distance_km": act.get("Distance_km", "")
+            })
+
+    return pd.DataFrame(rows)
 
 # ================= MAP BUILDER =================
 def build_itinerary_map(itinerary, df):
@@ -937,3 +1022,260 @@ if st.session_state.itinerary:
                 st.markdown(get_activity_card(a['Place'], a['Time'], emoji, badge_container_html, card_class), unsafe_allow_html=True)
         
         st.markdown("")
+
+    # ================= EXPORT ITINERARY =================
+    st.markdown("### 📥 Export Itinerary")
+
+    export_df = itinerary_to_dataframe(st.session_state.itinerary)
+
+    csv = export_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="⬇ Download Itinerary CSV",
+        data=csv,
+        file_name="travel_itinerary.csv",
+        mime="text/csv"
+    )
+
+    # ================= RENTAL VEHICLES =================
+    st.markdown("")
+    st.markdown("## 🚗 Rental Vehicles")
+
+    selected_state = st.selectbox("Select State for Rental Cars", ["Rajasthan", "Madhya Pradesh"])
+
+    # Budget Filter
+    rental_budget = st.selectbox("Select Budget for Rental Cars", ["Low", "Medium", "High"])
+
+    cars_data = []
+
+    if selected_state == "Rajasthan":
+        cars_data = [
+            {"name": "Swift Dzire", "type": "Sedan", "price": 1800},
+            {"name": "Hyundai Creta", "type": "SUV", "price": 3000},
+            {"name": "Innova Crysta", "type": "SUV", "price": 3500},
+            {"name": "Thar", "type": "Adventure SUV", "price": 5000}
+        ]
+    else:
+        cars_data = [
+            {"name": "WagonR", "type": "Hatchback", "price": 1200},
+            {"name": "Swift Dzire", "type": "Sedan", "price": 1600},
+            {"name": "Kia Sonet", "type": "SUV", "price": 2500},
+            {"name": "Scorpio", "type": "SUV", "price": 3200}
+        ]
+
+    # Filter Logic
+    filtered_cars = []
+
+    for car in cars_data:
+        if rental_budget == "Low" and car["price"] <= 1800:
+            filtered_cars.append(car)
+        elif rental_budget == "Medium" and 1800 < car["price"] <= 3000:
+            filtered_cars.append(car)
+        elif rental_budget == "High" and car["price"] > 3000:
+            filtered_cars.append(car)
+
+    if not filtered_cars:
+        st.warning("No cars available in this budget range.")
+
+    for car in filtered_cars:
+        st.markdown(f"""
+        🚘 **{car['name']}** ({car['type']})  
+        💰 Price: ₹{car['price']}/day  
+        🔗 [Book Now](https://www.zoomcar.com) | [Check on Revv](https://www.revv.co.in)
+        """)
+
+# ================= WEATHER SECTION =================
+st.markdown(get_section_header("🌤️", "Live Weather"), unsafe_allow_html=True)
+
+# Get city from user input or dataset
+weather_city = st.text_input("Enter City for Weather", value=city if 'city' in locals() else "Delhi")
+
+weather = get_weather(weather_city)
+
+if weather:
+    temp, condition, humidity = weather
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Temperature", f"{temp} °C")
+
+    with col2:
+        st.metric("Weather", condition.title())
+
+    with col3:
+        st.metric("Humidity", f"{humidity}%")
+
+else:
+    st.warning("Weather data not available. Please check the city name or try again later.")
+
+# ================= CHATBOT SECTION =================
+st.markdown("---")
+st.markdown(get_section_header("🤖", "Travel Assistant Chatbot"), unsafe_allow_html=True)
+
+# Initialize chat messages if not exists
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Optional: Add a clear chat button and model selector
+col1, col2, col3 = st.columns([4, 1, 1])
+with col2:
+    if st.button("🗑️ Clear Chat"):
+        st.session_state.messages = []
+        st.rerun()
+with col3:
+    model_choice = st.selectbox("Model", ["tinyllama", "llama2", "mistral"], index=0, label_visibility="collapsed")
+
+# Display chat title with styling
+st.markdown("""
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 10px; border-radius: 10px; margin-bottom: 20px;">
+    <p style="color: white; margin: 0; text-align: center;">💬 Ask me anything about your trip, places to visit, or get recommendations!</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Display all previous messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        # Check if the message contains itinerary content and format it nicely
+        content = message["content"]
+        if "Day" in content and any(day in content for day in ["Day 1", "Day 2", "Day 3", "Day 4"]):
+            # Format itinerary content with better structure
+            lines = content.split('\n')
+            formatted_lines = []
+            for line in lines:
+                if line.strip().startswith("Day"):
+                    formatted_lines.append(f"\n### {line.strip()}")
+                elif line.strip() and not line.strip().startswith("```"):
+                    formatted_lines.append(f"- {line.strip()}")
+                else:
+                    formatted_lines.append(line)
+            content = '\n'.join(formatted_lines)
+        st.markdown(content)
+
+# Chat input
+prompt = st.chat_input("Ask me about your trip, places, or itinerary...")
+
+if prompt:
+    # Add user message to session state
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Display user message
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Get assistant response
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking... 🧠"):
+            try:
+                # Get current itinerary if exists
+                current_itinerary = ""
+                if st.session_state.itinerary:
+                    itinerary_summary = []
+                    for day, activities in st.session_state.itinerary.items():
+                        day_places = [act['Place'] for act in activities if act['Category'] != 'food']
+                        itinerary_summary.append(f"{day}: {', '.join(day_places[:3])}...")
+                    current_itinerary = "\n".join(itinerary_summary)
+                
+                # Build conversation context with system prompt
+                system_content = f"""You are a helpful travel assistant for a Smart Travel Itinerary Generator app. Your responses should be well-formatted and easy to read.
+
+Available cities: {', '.join(df.City.unique())[:200]}
+
+Current trip information: 
+{current_itinerary if current_itinerary else 'No itinerary generated yet'}
+
+When providing itineraries, always:
+1. Format each day clearly with "### Day X:" headers
+2. Use bullet points for activities
+3. Include timings where appropriate
+4. Keep descriptions concise but informative
+5. Ensure the number of days requested is exactly provided
+
+Example format for a 4-day itinerary:
+### Day 1: Arrival and Local Exploration
+- Morning: Activity description
+- Afternoon: Activity description
+- Evening: Activity description
+
+### Day 2: Historical Sites
+- 9:00 AM - Visit Amber Fort
+- 1:00 PM - Lunch at local restaurant
+- 3:00 PM - Explore City Palace
+
+Provide friendly, practical travel advice. Keep responses concise but helpful."""
+
+                # Prepare messages for Ollama with FULL conversation history
+                messages = [{"role": "system", "content": system_content}]
+                
+                # Add ALL previous messages from session state
+                for msg in st.session_state.messages:
+                    messages.append({"role": msg["role"], "content": msg["content"]})
+                
+                # Get response from Ollama
+                response = ollama.chat(
+                    model=model_choice,
+                    messages=messages,
+                    options={
+                        "temperature": 0.7,
+                        "num_predict": 500,  # Increased for longer responses
+                        "num_ctx": 2048
+                    }
+                )
+                
+                assistant_response = response['message']['content']
+                
+                # Post-process the response to ensure proper formatting
+                if "Day" in assistant_response:
+                    # Ensure days are properly numbered and formatted
+                    lines = assistant_response.split('\n')
+                    formatted_response = []
+                    day_count = 1
+                    
+                    for line in lines:
+                        # Check if line contains day information
+                        if "day" in line.lower() and any(str(i) in line for i in range(1, 8)):
+                            # Try to extract the day number
+                            for i in range(1, 8):
+                                if str(i) in line and f"day {i}" in line.lower():
+                                    formatted_response.append(f"\n### Day {i}: {line.replace(f'Day {i}', '').replace(f'day {i}', '').strip()}")
+                                    day_count = i + 1
+                                    break
+                            else:
+                                formatted_response.append(f"\n### {line.strip()}")
+                        elif line.strip() and not line.strip().startswith('#'):
+                            # Add bullet points to activity lines
+                            if any(word in line.lower() for word in ['morning', 'afternoon', 'evening', 'visit', 'explore', 'lunch', 'dinner']):
+                                formatted_response.append(f"- {line.strip()}")
+                            else:
+                                formatted_response.append(line)
+                        else:
+                            formatted_response.append(line)
+                    
+                    assistant_response = '\n'.join(formatted_response)
+                
+            except Exception as e:
+                assistant_response = f"⚠️ Error: {str(e)}\n\nPlease make sure Ollama is running with: `ollama serve`"
+            
+            # Display response
+            st.markdown(assistant_response)
+            
+            # Add to session state
+            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+
+# Add a few example questions to help users get started
+with st.expander("💡 Example Questions You Can Ask"):
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        - "Give me a 4-day itinerary for Jaipur"
+        - "What are the best places to visit in Udaipur?"
+        - "Suggest restaurants in Delhi for dinner"
+        - "How many days should I spend in Agra?"
+        """)
+    with col2:
+        st.markdown("""
+        - "What's the best time to visit Rajasthan?"
+        - "Recommend family-friendly activities in Mumbai"
+        - "Tell me about the local cuisine in Kerala"
+        - "Give me budget tips for traveling in India"
+        """)
