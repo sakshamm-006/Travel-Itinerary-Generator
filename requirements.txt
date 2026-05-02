@@ -1,4 +1,8 @@
 streamlit
 pandas
-numpy
 geopy
+folium
+streamlit-folium
+requests
+openpyxl
+ollama
